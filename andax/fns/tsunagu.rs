@@ -390,7 +390,29 @@ pub mod ar {
         trace!("Got json from {repo} hosted with Forgejo:\n{v}");
         Ok(v[0]["sha"].as_str().unwrap_or("").to_owned())
     }
+    #[rhai_fn(return_raw, global)]
+    pub fn google(ctx: NativeCallContext, repo: &str) -> Res<String> {
+        let mut remote = Remote::create_detached(format!("https://chromium.googlesource.com/{repo}")).ehdl(&ctx)?;
+        remote.connect(git2::Direction::Fetch).ehdl(&ctx)?;
 
+        //let mut latest = Version::new(0, 0, 0);
+        let mut latest = String::new();
+        let heads = remote.list().ehdl(&ctx)?;
+        for head in heads {
+            if head.name().ends_with("^{}") {
+                continue;
+            }
+
+            // Let's find the version in the tag name...
+            let Some(tag_name) = head.name().strip_prefix("refs/tags/") else { continue };
+            let Some(version_start_index) = tag_name.find(char::is_numeric) else { continue };
+            let (_, version_str) = tag_name.split_at(version_start_index);
+
+            // The last version listed is the latest version
+            latest = String::from(version_str);
+        }
+        Ok(latest)
+    }
     #[rhai_fn(return_raw, global)]
     pub fn google_commit(ctx: NativeCallContext, repo: &str) -> Res<String> {
         let req = get(ctx, &format!("https://chromium.googlesource.com/{repo}/+/HEAD?format=json"))?;
